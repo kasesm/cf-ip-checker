@@ -418,6 +418,147 @@
     h1 { font-size: 1.4rem; }
     .controls { flex-direction: column; }
   }
+
+  /* IP Range Manager */
+  .range-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .range-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .range-section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toggle-icon {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+    color: var(--muted);
+  }
+
+  .range-section.collapsed .range-body { display: none; }
+  .range-section.collapsed .toggle-icon { transform: rotate(-90deg); }
+
+  .preset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .chip {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-family: monospace;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.active { background: rgba(246,130,31,0.15); border-color: var(--accent); color: var(--accent2); }
+
+  .chip-label {
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  .range-input-area {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .range-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .range-input-row input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    color: var(--text);
+    font-family: monospace;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .range-input-row input:focus { border-color: var(--accent); }
+  .range-input-row input.invalid { border-color: var(--red); }
+
+  .btn-icon {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .btn-icon:hover { border-color: var(--red); color: var(--red); }
+  .btn-icon.add:hover { border-color: var(--green); color: var(--green); }
+
+  .add-range-btn {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 7px 16px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .add-range-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .range-summary {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+
+  .range-summary span { color: var(--accent2); font-weight: 600; }
+
 </style>
 </head>
 <body>
@@ -429,6 +570,27 @@
     </div>
     <p class="subtitle">بررسی دسترسی به IP های Cloudflare از اینترنت شما</p>
   </header>
+
+
+  <!-- IP Range Manager -->
+  <div class="range-section" id="rangeSection">
+    <div class="range-section-header" onclick="toggleRangeSection()">
+      <div class="range-section-title">
+        🎯 رینج‌های IP برای اسکن
+      </div>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="range-body">
+      <div style="font-size:0.78rem; color:var(--muted); margin-bottom:12px;">رینج‌های پیشنهادی Cloudflare — کلیک کن تا اضافه/حذف بشه:</div>
+      <div class="preset-chips" id="presetChips"></div>
+
+      <div style="font-size:0.78rem; color:var(--muted); margin-bottom:8px;">رینج‌های سفارشی (CIDR):</div>
+      <div class="range-input-area" id="customRanges"></div>
+      <button class="add-range-btn" onclick="addRangeInput()">+ افزودن رینج جدید</button>
+
+      <div class="range-summary" id="rangeSummary"></div>
+    </div>
+  </div>
 
   <div class="controls">
     <div class="control-group">
@@ -508,9 +670,11 @@ function intToIp(n) {
 
 function generateIPs(count) {
   const ips = new Set();
+  const ranges = getActiveRanges();
+  if (ranges.length === 0) return [];
   const attempts = count * 10;
   for (let i = 0; i < attempts && ips.size < count; i++) {
-    const range = CF_RANGES[Math.floor(Math.random() * CF_RANGES.length)];
+    const range = ranges[Math.floor(Math.random() * ranges.length)];
     const [base, bits] = range.split('/');
     const prefix = parseInt(bits);
     const baseInt = ipToInt(base);
@@ -658,6 +822,103 @@ async function checkPort(ip, port, timeoutMs) {
     return (Date.now() - start) < (timeoutMs - 200);
   }
 }
+
+
+// ── Range Manager ──────────────────────────────────────────────
+const PRESET_RANGES = [
+  { cidr: '103.21.244.0/22',  label: 'CF-1' },
+  { cidr: '103.22.200.0/22',  label: 'CF-2' },
+  { cidr: '103.31.4.0/22',    label: 'CF-3' },
+  { cidr: '104.16.0.0/13',    label: 'CF-4 ⭐' },
+  { cidr: '104.24.0.0/14',    label: 'CF-5 ⭐' },
+  { cidr: '108.162.192.0/18', label: 'CF-6' },
+  { cidr: '131.0.72.0/22',    label: 'CF-7' },
+  { cidr: '141.101.64.0/18',  label: 'CF-8' },
+  { cidr: '162.158.0.0/15',   label: 'CF-9 ⭐' },
+  { cidr: '172.64.0.0/13',    label: 'CF-10 ⭐' },
+  { cidr: '173.245.48.0/20',  label: 'CF-11' },
+  { cidr: '188.114.96.0/20',  label: 'CF-12' },
+  { cidr: '190.93.240.0/20',  label: 'CF-13' },
+  { cidr: '197.234.240.0/22', label: 'CF-14' },
+  { cidr: '198.41.128.0/17',  label: 'CF-15 ⭐' },
+];
+
+// ⭐ = بهترین رینج‌ها برای ایران
+let activePresets = new Set(['104.16.0.0/13','104.24.0.0/14','162.158.0.0/15','172.64.0.0/13','198.41.128.0/17']);
+
+function initRangeManager() {
+  const chips = document.getElementById('presetChips');
+  PRESET_RANGES.forEach(r => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (activePresets.has(r.cidr) ? ' active' : '');
+    chip.innerHTML = `<span>${r.cidr}</span><span class="chip-label">${r.label}</span>`;
+    chip.onclick = () => togglePreset(r.cidr, chip);
+    chips.appendChild(chip);
+  });
+  updateRangeSummary();
+}
+
+function togglePreset(cidr, el) {
+  if (activePresets.has(cidr)) {
+    activePresets.delete(cidr);
+    el.classList.remove('active');
+  } else {
+    activePresets.add(cidr);
+    el.classList.add('active');
+  }
+  updateRangeSummary();
+}
+
+function addRangeInput(value = '') {
+  const container = document.getElementById('customRanges');
+  const row = document.createElement('div');
+  row.className = 'range-input-row';
+  row.innerHTML = `
+    <input type="text" placeholder="مثال: 1.2.3.0/24" value="${value}" oninput="validateRange(this); updateRangeSummary()">
+    <button class="btn-icon" title="حذف" onclick="this.parentElement.remove(); updateRangeSummary()">✕</button>
+  `;
+  container.appendChild(row);
+  row.querySelector('input').focus();
+  updateRangeSummary();
+}
+
+function validateRange(input) {
+  const val = input.value.trim();
+  if (!val) { input.classList.remove('invalid'); return; }
+  const valid = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(val);
+  input.classList.toggle('invalid', !valid);
+}
+
+function getCustomRanges() {
+  return [...document.querySelectorAll('#customRanges input')]
+    .map(i => i.value.trim())
+    .filter(v => /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(v));
+}
+
+function getActiveRanges() {
+  return [...activePresets, ...getCustomRanges()];
+}
+
+function updateRangeSummary() {
+  const all = getActiveRanges();
+  let total = 0;
+  all.forEach(cidr => {
+    const bits = parseInt(cidr.split('/')[1]);
+    total += Math.max(0, Math.pow(2, 32 - bits) - 2);
+  });
+  const fmt = total > 1e6 ? (total/1e6).toFixed(1)+'M' : total > 1e3 ? (total/1e3).toFixed(0)+'K' : total;
+  document.getElementById('rangeSummary').innerHTML =
+    `<span>${all.length}</span> رینج فعال — حدود <span>${fmt}</span> آدرس IP قابل اسکن`;
+}
+
+function toggleRangeSection() {
+  document.getElementById('rangeSection').classList.toggle('collapsed');
+}
+
+// Init on load
+initRangeManager();
+
+// ── End Range Manager ───────────────────────────────────────────
 
 async function startCheck() {
   shouldStop = false;
