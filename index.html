@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بررسی IP های Cloudflare</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #f6821f;
+    --accent2: #fbad41;
+    --green: #22d3a5;
+    --red: #f43f5e;
+    --yellow: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Vazirmatn', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(246,130,31,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(246,130,31,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .logo-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 0 30px rgba(246,130,31,0.4);
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 8px;
+  }
+
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 140px;
+  }
+
+  label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input[type="number"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input[type="number"]:focus {
+    border-color: var(--accent);
+  }
+
+  .btn {
+    padding: 12px 32px;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    box-shadow: 0 4px 20px rgba(246,130,31,0.35);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(246,130,31,0.5);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Stats bar */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .stat-total .stat-value { color: var(--text); }
+  .stat-clean .stat-value { color: var(--green); }
+  .stat-blocked .stat-value { color: var(--red); }
+  .stat-pending .stat-value { color: var(--yellow); }
+
+  /* Progress */
+  .progress-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    height: 8px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  /* Filter tabs */
+  .filter-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 7px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  /* Results grid */
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+  }
+
+  .ip-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .ip-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .ip-card.clean { border-right: 3px solid var(--green); }
+  .ip-card.blocked { border-right: 3px solid var(--red); }
+  .ip-card.checking { border-right: 3px solid var(--yellow); }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .clean .status-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .blocked .status-dot { background: var(--red); }
+  .checking .status-dot {
+    background: var(--yellow);
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .ip-info { flex: 1; min-width: 0; }
+
+  .ip-addr {
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+
+  .ip-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .latency {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .latency-fast { background: rgba(34,211,165,0.15); color: var(--green); }
+  .latency-medium { background: rgba(251,191,36,0.15); color: var(--yellow); }
+  .latency-slow { background: rgba(244,63,94,0.15); color: var(--red); }
+  .latency-blocked { background: rgba(100,116,139,0.15); color: var(--muted); }
+
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: all 0.15s;
+    font-family: 'Vazirmatn', sans-serif;
+  }
+
+  .copy-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .empty-icon { font-size: 3rem; margin-bottom: 12px; }
+
+  /* Export section */
+  .export-section {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: none;
+  }
+
+  .export-title {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .clean-ips-list {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: var(--green);
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.6;
+    word-break: break-all;
+    margin-bottom: 12px;
+  }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 1.4rem; }
+    .controls { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">☁️</div>
+      <h1>بررسی IP های Cloudflare</h1>
+    </div>
+    <p class="subtitle">بررسی دسترسی به IP های Cloudflare از اینترنت شما</p>
+  </header>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>تعداد IP برای تست</label>
+      <input type="number" id="ipCount" value="50" min="10" max="200">
+    </div>
+    <div class="control-group">
+      <label>تایم‌اوت (میلی‌ثانیه)</label>
+      <input type="number" id="timeout" value="3000" min="1000" max="10000" step="500">
+    </div>
+    <div class="control-group">
+      <label>درخواست‌های همزمان</label>
+      <input type="number" id="concurrency" value="20" min="5" max="50">
+    </div>
+    <button class="btn btn-primary" id="startBtn" onclick="startCheck()">🚀 شروع بررسی</button>
+    <button class="btn btn-secondary" id="stopBtn" onclick="stopCheck()" style="display:none">⏹ توقف</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card stat-total"><div class="stat-value" id="totalCount">0</div><div class="stat-label">کل IP</div></div>
+    <div class="stat-card stat-clean"><div class="stat-value" id="cleanCount">0</div><div class="stat-label">✅ تمیز</div></div>
+    <div class="stat-card stat-blocked"><div class="stat-value" id="blockedCount">0</div><div class="stat-label">❌ بلاک</div></div>
+    <div class="stat-card stat-pending"><div class="stat-value" id="pendingCount">0</div><div class="stat-label">⏳ در حال بررسی</div></div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="filter-tabs">
+    <button class="tab active" onclick="setFilter('all', this)">همه</button>
+    <button class="tab" onclick="setFilter('clean', this)">تمیز</button>
+    <button class="tab" onclick="setFilter('blocked', this)">بلاک شده</button>
+    <button class="tab" onclick="setFilter('checking', this)">در حال بررسی</button>
+  </div>
+
+  <div id="resultsGrid" class="results-grid">
+    <div class="empty-state">
+      <div class="empty-icon">🌐</div>
+      <div>برای شروع بررسی، دکمه «شروع بررسی» را بزنید</div>
+    </div>
+  </div>
+
+  <div class="export-section" id="exportSection">
+    <div class="export-title">IP های تمیز (برای کپی):</div>
+    <div class="clean-ips-list" id="cleanIpsList"></div>
+    <button class="btn btn-secondary" onclick="copyCleanIPs()">📋 کپی همه IP های تمیز</button>
+  </div>
+</div>
+
+<script>
+// Cloudflare IP ranges (IPv4)
+const CF_RANGES = [
+  '103.21.244.0/22','103.22.200.0/22','103.31.4.0/22',
+  '104.16.0.0/13','104.24.0.0/14','108.162.192.0/18',
+  '131.0.72.0/22','141.101.64.0/18','162.158.0.0/15',
+  '172.64.0.0/13','173.245.48.0/20','188.114.96.0/20',
+  '190.93.240.0/20','197.234.240.0/22','198.41.128.0/17'
+];
+
+let results = {};
+let shouldStop = false;
+let currentFilter = 'all';
+
+function ipToInt(ip) {
+  return ip.split('.').reduce((acc, b) => (acc << 8) | parseInt(b), 0) >>> 0;
+}
+
+function intToIp(n) {
+  return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+}
+
+function generateIPs(count) {
+  const ips = new Set();
+  const attempts = count * 10;
+  for (let i = 0; i < attempts && ips.size < count; i++) {
+    const range = CF_RANGES[Math.floor(Math.random() * CF_RANGES.length)];
+    const [base, bits] = range.split('/');
+    const prefix = parseInt(bits);
+    const baseInt = ipToInt(base);
+    const hostBits = 32 - prefix;
+    const mask = (0xFFFFFFFF << hostBits) >>> 0;
+    const network = baseInt & mask;
+    const maxHost = Math.pow(2, hostBits) - 2;
+    if (maxHost <= 0) continue;
+    const offset = Math.floor(Math.random() * maxHost) + 1;
+    ips.add(intToIp((network + offset) >>> 0));
+  }
+  return [...ips].slice(0, count);
+}
+
+async function checkIP(ip, timeoutMs) {
+  const start = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fetch(`https://${ip}/cdn-cgi/trace`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    return { status: 'clean', latency: Date.now() - start };
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') return { status: 'blocked', latency: null };
+    // Even a CORS error means the server responded = accessible
+    if (Date.now() - start < timeoutMs - 100) {
+      return { status: 'clean', latency: Date.now() - start };
+    }
+    return { status: 'blocked', latency: null };
+  }
+}
+
+function updateStats() {
+  const all = Object.values(results);
+  const clean = all.filter(r => r.status === 'clean').length;
+  const blocked = all.filter(r => r.status === 'blocked').length;
+  const checking = all.filter(r => r.status === 'checking').length;
+  document.getElementById('totalCount').textContent = all.length;
+  document.getElementById('cleanCount').textContent = clean;
+  document.getElementById('blockedCount').textContent = blocked;
+  document.getElementById('pendingCount').textContent = checking;
+
+  // Update export
+  const cleanIPs = all.filter(r => r.status === 'clean').map(r => r.ip);
+  if (cleanIPs.length > 0) {
+    document.getElementById('exportSection').style.display = 'block';
+    document.getElementById('cleanIpsList').textContent = cleanIPs.join(', ');
+  }
+}
+
+function getLatencyBadge(latency, status) {
+  if (status === 'blocked') return `<span class="latency latency-blocked">بلاک</span>`;
+  if (status === 'checking') return `<span class="latency latency-medium">...</span>`;
+  if (latency < 500) return `<span class="latency latency-fast">${latency}ms</span>`;
+  if (latency < 1500) return `<span class="latency latency-medium">${latency}ms</span>`;
+  return `<span class="latency latency-slow">${latency}ms</span>`;
+}
+
+function renderResults() {
+  const grid = document.getElementById('resultsGrid');
+  const all = Object.values(results);
+  const filtered = currentFilter === 'all' ? all : all.filter(r => r.status === currentFilter);
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div>نتیجه‌ای یافت نشد</div></div>`;
+    return;
+  }
+
+  // Sort: clean first, then by latency
+  filtered.sort((a, b) => {
+    if (a.status === 'clean' && b.status !== 'clean') return -1;
+    if (b.status === 'clean' && a.status !== 'clean') return 1;
+    if (a.latency && b.latency) return a.latency - b.latency;
+    return 0;
+  });
+
+  grid.innerHTML = filtered.map(r => `
+    <div class="ip-card ${r.status}">
+      <div class="status-dot"></div>
+      <div class="ip-info">
+        <div class="ip-addr">${r.ip}</div>
+        <div class="ip-meta">${r.status === 'clean' ? '✅ قابل دسترس' : r.status === 'blocked' ? '❌ بلاک شده' : '⏳ در حال بررسی'}</div>
+      </div>
+      ${getLatencyBadge(r.latency, r.status)}
+      ${r.status === 'clean' ? `<button class="copy-btn" onclick="navigator.clipboard.writeText('${r.ip}')">کپی</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderResults();
+}
+
+let renderTimer = null;
+function scheduleRender() {
+  if (renderTimer) return;
+  renderTimer = setTimeout(() => {
+    renderResults();
+    updateStats();
+    renderTimer = null;
+  }, 200);
+}
+
+async function startCheck() {
+  shouldStop = false;
+  results = {};
+  document.getElementById('exportSection').style.display = 'none';
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = '';
+  document.getElementById('progressWrap').style.display = 'block';
+
+  const count = parseInt(document.getElementById('ipCount').value);
+  const timeout = parseInt(document.getElementById('timeout').value);
+  const concurrency = parseInt(document.getElementById('concurrency').value);
+  const ips = generateIPs(count);
+
+  // Init all as checking
+  ips.forEach(ip => { results[ip] = { ip, status: 'checking', latency: null }; });
+  renderResults();
+  updateStats();
+
+  let done = 0;
+  let idx = 0;
+
+  async function worker() {
+    while (idx < ips.length && !shouldStop) {
+      const ip = ips[idx++];
+      const res = await checkIP(ip, timeout);
+      results[ip] = { ip, ...res };
+      done++;
+      const pct = (done / ips.length) * 100;
+      document.getElementById('progressBar').style.width = pct + '%';
+      scheduleRender();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, ips.length) }, () => worker());
+  await Promise.all(workers);
+
+  // Final render
+  clearTimeout(renderTimer);
+  renderTimer = null;
+  renderResults();
+  updateStats();
+
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+  if (!shouldStop) {
+    document.getElementById('progressBar').style.width = '100%';
+    setTimeout(() => { document.getElementById('progressWrap').style.display = 'none'; }, 1500);
+  }
+}
+
+function stopCheck() {
+  shouldStop = true;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+}
+
+function copyCleanIPs() {
+  const text = document.getElementById('cleanIpsList').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('✅ کپی شد!'));
+}
+</script>
+</body>
+</html>
