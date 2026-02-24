@@ -443,6 +443,10 @@
       <label>درخواست‌های همزمان</label>
       <input type="number" id="concurrency" value="20" min="5" max="50">
     </div>
+    <div class="control-group">
+      <label>پورت برای بررسی</label>
+      <input type="number" id="portInput" value="443" min="1" max="65535" placeholder="443">
+    </div>
     <button class="btn btn-primary" id="startBtn" onclick="startCheck()">🚀 شروع بررسی</button>
     <button class="btn btn-secondary" id="stopBtn" onclick="stopCheck()" style="display:none">⏹ توقف</button>
   </div>
@@ -492,6 +496,7 @@ const CF_RANGES = [
 let results = {};
 let shouldStop = false;
 let currentFilter = 'all';
+let selectedPort = 443;
 
 function ipToInt(ip) {
   return ip.split('.').reduce((acc, b) => (acc << 8) | parseInt(b), 0) >>> 0;
@@ -590,13 +595,13 @@ function renderResults() {
   grid.innerHTML = filtered.map(r => {
     let portsBadges = '';
     if (r.status === 'clean') {
-      const p = r.ports && r.ports[443];
+      const p = r.ports && r.ports[selectedPort];
       if (p === undefined || p === 'checking') {
-        portsBadges = `<span class="port-badge port-checking">443 ...</span>`;
+        portsBadges = `<span class="port-badge port-checking">${selectedPort} ...</span>`;
       } else if (p === true) {
-        portsBadges = `<span class="port-badge port-open">443 ✓</span>`;
+        portsBadges = `<span class="port-badge port-open">${selectedPort} ✓</span>`;
       } else {
-        portsBadges = `<span class="port-badge port-closed">443 ✗</span>`;
+        portsBadges = `<span class="port-badge port-closed">${selectedPort} ✗</span>`;
       }
     }
     return `
@@ -630,12 +635,15 @@ function scheduleRender() {
   }, 200);
 }
 
-async function checkPort443(ip, timeoutMs) {
+
+
+async function checkPort(ip, port, timeoutMs) {
   const start = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const protocol = (port === 80 || port === 8080) ? 'http' : 'https';
   try {
-    await fetch(`https://${ip}:443/cdn-cgi/trace`, {
+    await fetch(`${protocol}://${ip}:${port}/cdn-cgi/trace`, {
       mode: 'no-cors',
       cache: 'no-store',
       signal: controller.signal
@@ -645,7 +653,6 @@ async function checkPort443(ip, timeoutMs) {
   } catch(e) {
     clearTimeout(timer);
     if (e.name === 'AbortError') return false;
-    // CORS/network error but responded fast = port is open
     return (Date.now() - start) < (timeoutMs - 200);
   }
 }
@@ -661,6 +668,7 @@ async function startCheck() {
   const count = parseInt(document.getElementById('ipCount').value);
   const timeout = parseInt(document.getElementById('timeout').value);
   const concurrency = parseInt(document.getElementById('concurrency').value);
+  selectedPort = parseInt(document.getElementById('portInput').value) || 443;
   const ips = generateIPs(count);
 
   // Init all as checking
@@ -683,10 +691,10 @@ async function startCheck() {
 
       // If clean, check port 443 in background
       if (res.status === 'clean') {
-        results[ip].ports[443] = 'checking';
-        checkPort443(ip, timeout).then(open => {
+        results[ip].ports[selectedPort] = 'checking';
+        checkPort(ip, selectedPort, timeout).then(open => {
           if (results[ip]) {
-            results[ip].ports[443] = open;
+            results[ip].ports[selectedPort] = open;
             scheduleRender();
           }
         });
