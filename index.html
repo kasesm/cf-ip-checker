@@ -443,9 +443,9 @@
       <label>درخواست‌های همزمان</label>
       <input type="number" id="concurrency" value="20" min="5" max="50">
     </div>
-    <div class="control-group">
-      <label>پورت برای بررسی</label>
-      <input type="number" id="portInput" value="443" min="1" max="65535" placeholder="443">
+    <div class="control-group" style="flex: 2; min-width: 200px;">
+      <label>پورت‌ها (با کاما جدا کن)</label>
+      <input type="text" id="portInput" value="443, 2053, 8443" placeholder="443, 2053, 8443" style="font-family: monospace;">
     </div>
     <button class="btn btn-primary" id="startBtn" onclick="startCheck()">🚀 شروع بررسی</button>
     <button class="btn btn-secondary" id="stopBtn" onclick="stopCheck()" style="display:none">⏹ توقف</button>
@@ -496,7 +496,7 @@ const CF_RANGES = [
 let results = {};
 let shouldStop = false;
 let currentFilter = 'all';
-let selectedPort = 443;
+let selectedPort = [443];
 
 function ipToInt(ip) {
   return ip.split('.').reduce((acc, b) => (acc << 8) | parseInt(b), 0) >>> 0;
@@ -595,14 +595,16 @@ function renderResults() {
   grid.innerHTML = filtered.map(r => {
     let portsBadges = '';
     if (r.status === 'clean') {
-      const p = r.ports && r.ports[selectedPort];
-      if (p === undefined || p === 'checking') {
-        portsBadges = `<span class="port-badge port-checking">${selectedPort} ...</span>`;
-      } else if (p === true) {
-        portsBadges = `<span class="port-badge port-open">${selectedPort} ✓</span>`;
-      } else {
-        portsBadges = `<span class="port-badge port-closed">${selectedPort} ✗</span>`;
-      }
+      selectedPort.forEach(port => {
+        const p = r.ports && r.ports[port];
+        if (p === undefined || p === 'checking') {
+          portsBadges += `<span class="port-badge port-checking">${port} ···</span>`;
+        } else if (p === true) {
+          portsBadges += `<span class="port-badge port-open">${port} ✓</span>`;
+        } else {
+          portsBadges += `<span class="port-badge port-closed">${port} ✗</span>`;
+        }
+      });
     }
     return `
     <div class="ip-card ${r.status}">
@@ -668,7 +670,8 @@ async function startCheck() {
   const count = parseInt(document.getElementById('ipCount').value);
   const timeout = parseInt(document.getElementById('timeout').value);
   const concurrency = parseInt(document.getElementById('concurrency').value);
-  selectedPort = parseInt(document.getElementById('portInput').value) || 443;
+  selectedPort = document.getElementById('portInput').value.split(',').map(p => parseInt(p.trim())).filter(p => p > 0 && p <= 65535);
+  if (selectedPort.length === 0) selectedPort = [443];
   const ips = generateIPs(count);
 
   // Init all as checking
@@ -691,12 +694,14 @@ async function startCheck() {
 
       // If clean, check port 443 in background
       if (res.status === 'clean') {
-        results[ip].ports[selectedPort] = 'checking';
-        checkPort(ip, selectedPort, timeout).then(open => {
-          if (results[ip]) {
-            results[ip].ports[selectedPort] = open;
-            scheduleRender();
-          }
+        selectedPort.forEach(port => {
+          results[ip].ports[port] = 'checking';
+          checkPort(ip, port, timeout).then(open => {
+            if (results[ip]) {
+              results[ip].ports[port] = open;
+              scheduleRender();
+            }
+          });
         });
       }
     }
